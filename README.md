@@ -1,40 +1,32 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Next.js + Datadog Request Timeout Reproduction
 
-## Getting Started
+## Background
+Attempt at reproducing an issue with a request timing out using a custom server (trying both normal HTTP server and express for actual timeout middleware), Next.js 12 (12.3.1), and dd-trace@latest. The error in question is:
 
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+TypeError: Cannot read properties of undefined (reading 'url') 
+  at NextPlugin.pageLoad (webpack://hello/./node_modules/dd-trace/packages/datadog-plugin-next/src/index.js?:89:27) 
+  at eval (webpack://hello/./node_modules/dd-trace/packages/datadog-plugin-next/src/index.js?:17:55) 
+  at Subscription._handler (webpack://hello/./node_modules/dd-trace/packages/dd-trace/src/plugins/plugin.js?:14:9) 
+  at Channel.publish (node:diagnostics_channel:54:9) 
+  at NextNodeServer.findPageComponents (webpack://hello/./node_modules/dd-trace/packages/datadog-instrumentations/src/next.js?:86:23) 
+  at NextNodeServer.renderPageComponent (/Users/jack/hello/node_modules/next/dist/server/base-server.js:1579:35) 
+  at NextNodeServer.renderPageComponent (/Users/jack/hello/node_modules/next/dist/server/next-server.js:410:22)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+In the past, this error was caused by using Next.js middleware. In newer version (Next.js 13.5+), an error was thrown internally in Next.js to transition from middleware to the actual endpoint logic. On the Datadog side, we didn't trace high up enough in the stack to see that this error was caught, so we caught it additionally ourselves and ended the span early. Since Next.js uses the same handler function for both middleware and normal endpoint logic (like an API route, or handling a page load), and we safeguard double-tracing the same request, we wouldn't start a span for the next invocation of the handler method. This means that when the page load function was called, which we also wrap in order to attach the page resource name to the span, we would fail since there was neither a span nor, as a consequence, a request.
 
-You can start editing the page by modifying `pages/index.js`. The page auto-updates as you edit the file.
+This has been more difficult to reproduce here because the `next` span always starts before the request times out (assuming the timeout threshold is set to some amount that the request would timeout during some handler within Next.js). Thus, the requst always gets associated with the span (via a WeakMap within the tracer code). Since the GC might not collect the span for a little bit, even after the span is finished, when the page load function is called in Next.js, and as a consequence our wrapper function in the tracer, the span still exists with reference to the request in our logic, making it so that we can still attach a page resource to the span. 
 
-[API routes](https://nextjs.org/docs/api-routes/introduction) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.js`.
+This is where I'm having trouble seeing the way to set up this scenario properly, and my confusion as to why it's happening in the first place.
 
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/api-routes/introduction) instead of React pages.
+## To run
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+```
+npm install
+npm run build
+node --require dd-trace/init server
+```
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+## Provided
+Besides the root `/`, a page `/hello` which calls `/api/hello` during `getServerSideProps`. `/api/hello` has a timeout on resolving its promise for the request, in an attempt to simulate a longer call time for ease in timing out the request somewhere else.
