@@ -1,9 +1,6 @@
 export async function getServerSideProps () {
-  try {
-    await fetch('http://localhost:3000/api/hello')
-  } catch (e) {
-    console.log(e)
-  }
+    await fetch('http://localhost:3001/api/hello')
+
   return {
     props: {}
   }
