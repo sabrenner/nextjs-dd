@@ -1,6 +1,19 @@
 'use strict'
 
-const { PORT = 3000 } = process.env
+const { PORT = 3001 } = process.env
+
+const tracer = require('dd-trace')
+tracer.init({ service: 'nextjs-dd-standard', env: 'test' })
+console.log(tracer)
+tracer.use('express')
+tracer.use('next', {
+  hooks: {
+    request: (span, req, res) => {
+      console.log(req.url);
+      console.log('sending')
+    }
+  }
+})
 
 const express = require('express')
 const { createServer } = require('http')
@@ -11,67 +24,30 @@ const timeout = require('connect-timeout')
 
 const next = require('next')
 
-const app = next({ dir: __dirname, dev: false, quiet: true, port: PORT, hostname: 'localhost' })
-const handle = app.getRequestHandler()
+const nextApp = next({ dir: __dirname, dev: true, hostname: 'localhost' })
+const handle = nextApp.getRequestHandler()
 
-function haltOnTimeout (req, res, next) {
-  if (!req.timedout) next()
-}
 
-app.prepare().then(() => {
 
-  // approach with express
+  const app = express();
+  app.use(timeout(`1s`));
 
-  // const server = express()
-  // server.use(function(req, res, next) {
-  //   // req.setTimeout(1, function () {
-  //   //   console.log('request timeout')
-  //   //   req.destroy()
-  //   // })
-  //   const delay_ms = 1
-  //   setTimeout(() => {
-  //     console.log(`we're timing out req`, req.url)
-  //     req.destroy()
-  //   }, delay_ms)
-  //   next()
-  // })
 
-  // // server.use(timeout('1ms'))
-  // // server.use(haltOnTimeout)
-  // // server.use(cookieParser())
-  // // server.use(haltOnTimeout)
+  const server = createServer(app)
 
-  // server.get('*', (req, res) => {
-  //   const parsedUrl = parse(req.url, true)
-  //   return handle(req, res, parsedUrl)
-  // })
+  nextApp.prepare().then(() => {
+    console.log('next app ready')
 
-  // server.listen(3000, (err) => {
-  //   if (err) throw err
-  //   console.log('Listening on port 3000')
-  // })
+  app.get('*', (req, res) => {
 
-  const server = createServer((req, res) => {
-
-    setTimeout(() => {
-      // simulate timeout middleware
-      console.log('destroying req')
-      // try different things?
-      // req.emit('error')
-      throw new Error('something is wrong but from http server')
-      // req.destroy()
-      // req.emit('close')
-      // res.end()
-    }, 5_000)
-
-    const parsedUrl = parse(req.url, true)
-
-    if (parsedUrl.path === '/exit') {
-      server.close()
-    } else {
-      handle(req, res, parsedUrl)
-    }
-  }).listen(PORT, 'localhost', () => {
-    console.log(server.address()) // eslint-disable-line no-console
+    const url = parse(req.url, true)
+    console.log(req.url)
+    return handle(req, res, url)
   })
+    
 })
+
+  server.listen(PORT, () => {
+    console.log('listening on ', PORT)
+  })
+
