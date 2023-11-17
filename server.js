@@ -2,18 +2,18 @@
 
 const { PORT = 3001 } = process.env
 
-const tracer = require('dd-trace')
-tracer.init({ service: 'nextjs-dd-standard', env: 'test' })
-console.log(tracer)
-tracer.use('express')
-tracer.use('next', {
-  hooks: {
-    request: (span, req, res) => {
-      console.log(req.url);
-      console.log('sending')
-    }
-  }
-})
+// const tracer = require('dd-trace')
+// tracer.init({ service: 'nextjs-dd-standard', env: 'sam.brenner' })
+// console.log(tracer)
+// tracer.use('express')
+// tracer.use('next', {
+//   hooks: {
+//     request: (span, req, res) => {
+//       console.log(req.url);
+//       console.log('sending')
+//     }
+//   }
+// })
 
 const express = require('express')
 const { createServer } = require('http')
@@ -24,19 +24,18 @@ const timeout = require('connect-timeout')
 
 const next = require('next')
 
-const nextApp = next({ dir: __dirname, dev: true, hostname: 'localhost' })
+const nextApp = next({ dir: __dirname, dev: false, hostname: 'localhost' })
 const handle = nextApp.getRequestHandler()
 
 
 
-  const app = express();
-  app.use(timeout(`1s`));
+const app = express();
+app.use(timeout(`2s`));
 
+const server = createServer(app)
 
-  const server = createServer(app)
-
-  nextApp.prepare().then(() => {
-    console.log('next app ready')
+nextApp.prepare().then(() => {
+  console.log('next app ready')
 
   app.get('*', (req, res) => {
 

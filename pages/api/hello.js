@@ -2,6 +2,9 @@
 
 export default async function handler(req, res) {
   // sleep for 5 seconds
-  await new Promise(resolve => setTimeout(resolve, 5000))
-  res.json({ hello: 'world'})
+  await new Promise(resolve => setTimeout(() => {
+    res.json({ hello: 'world'})
+    res.status(200).end()
+    resolve()
+  }, 5000))
 }
