@@ -7,6 +7,7 @@ export async function getServerSideProps () {
 }
 
 export default function Hello () {
+  throw new Error ('datadooooog')
   return (
     <div>
       <h1>Hi!</h1>
