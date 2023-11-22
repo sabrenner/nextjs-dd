@@ -24,7 +24,7 @@ const timeout = require('connect-timeout')
 
 const next = require('next')
 
-const nextApp = next({ dir: __dirname, dev: false, hostname: 'localhost' })
+const nextApp = next({ dir: __dirname, dev: true, hostname: 'localhost' })
 const handle = nextApp.getRequestHandler()
 
 
@@ -37,11 +37,21 @@ const server = createServer(app)
 nextApp.prepare().then(() => {
   console.log('next app ready')
 
-  app.get('*', (req, res) => {
+  app.get('/hello', async (req, res) => {
 
     const url = parse(req.url, true)
     console.log(req.url)
-    return handle(req, res, url)
+    try {
+      // pretend this throws and we setup an error handler via sentry or other tooling
+      await handle(req, res, url)
+
+    } catch (e) {
+    }
+
+    await handle(req, res, '_error')
+
+
+
   })
     
 })
